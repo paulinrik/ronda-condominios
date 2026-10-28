@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Rota dos Condomínios</title>
+<meta name="theme-color" content="#0f3b36">
+<meta name="description" content="Rota mais curta, checklist diário e relatório dos condomínios.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rota">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
@@ -143,6 +153,10 @@ details[open] summary{margin-bottom:10px}
       <button class="btn alt sm" id="impBtn" type="button">Importar dados</button>
       <input type="file" id="imp" accept="application/json,.json" hidden>
     </div>
+    <div class="row">
+      <button class="btn sm" id="install" type="button" hidden>Instalar app no celular</button>
+    </div>
+    <div class="status" id="installMsg"></div>
     <div class="status" id="dataMsg" role="status"></div>
   </section>
 
@@ -677,6 +691,19 @@ function rollover(){if(ensureToday()){render();renderHistory()}}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden) rollover()});
 window.addEventListener("focus",rollover);
 setInterval(rollover,60000);
+/* Instalação como app */
+let installEvt=null;
+const standalone=window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault(); installEvt=e; $("install").hidden=false});
+$("install").addEventListener("click",async()=>{
+  if(!installEvt) return;
+  installEvt.prompt();
+  try{await installEvt.userChoice}catch(e){}
+  installEvt=null; $("install").hidden=true;
+});
+window.addEventListener("appinstalled",()=>{$("install").hidden=true; $("installMsg").textContent="App instalado. Procure o ícone “Rota” na tela inicial."});
+if(!standalone&&iosLike()) $("installMsg").textContent="Para instalar no iPhone: toque em Compartilhar e depois em Adicionar à Tela de Início.";
+if("serviceWorker" in navigator&&location.protocol!=="file:") window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 initLeaflet(); render(); renderHistory(); scheduleRoad();
 </script>
 </body>
