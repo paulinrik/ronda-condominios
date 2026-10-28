@@ -1,0 +1,408 @@
+<title>Rota dos Condomínios</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: cabeçalho com origem, depois lista de paradas com mapa esquemático fixo na lateral. */
+:root{
+  --bg:#eef1f0; --surface:#ffffff; --fg:#14211f; --muted:#5b6b68; --line:#d3dbd9;
+  --accent:#0d7a6b; --accent-fg:#ffffff; --accent-soft:#d7efea; --warn:#a4470a;
+  --font:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1715; --surface:#17221f; --fg:#e6efed; --muted:#93a5a1; --line:#2a3a36;
+    --accent:#3cc5ae; --accent-fg:#06201b; --accent-soft:#16372f; --warn:#f0a060; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1715; --surface:#17221f; --fg:#e6efed; --muted:#93a5a1; --line:#2a3a36;
+  --accent:#3cc5ae; --accent-fg:#06201b; --accent-soft:#16372f; --warn:#f0a060; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--font); font-size:15px; line-height:1.4;
+  padding-block:16px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+h1{font-size:22px; font-weight:700; margin:0; letter-spacing:-.01em; text-wrap:balance}
+h2{font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+button,input,select{font:inherit; color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:12px}
+.row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.btn{background:var(--accent); color:var(--accent-fg); border:0; border-radius:6px; padding:10px 14px; font-weight:600; min-height:42px}
+.btn.alt{background:transparent; color:var(--fg); border:1px solid var(--line)}
+.btn.sm{padding:6px 10px; min-height:34px; font-size:13px}
+input[type=text],select{background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:9px 10px; min-height:42px; min-width:0; flex:1 1 160px}
+.status{font-size:13px; color:var(--muted); min-height:1.4em}
+.status.err{color:var(--warn)}
+label.chk{display:flex; gap:8px; align-items:center; font-size:14px}
+.summary{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap}
+.summary .big{font-family:var(--mono); font-size:18px; font-weight:500}
+.board{display:grid; grid-template-columns:88px minmax(0,1fr); gap:12px; align-items:start}
+.mapcol{position:sticky; top:calc(env(safe-area-inset-top,0px) + 8px); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:4px}
+.mapcol svg{display:block; width:100%; height:auto}
+.mapcol .grid{stroke:var(--line); stroke-width:1}
+.mapcol .path{stroke:var(--accent); stroke-width:2; fill:none; stroke-dasharray:4 3}
+.mapcol .dot{fill:var(--accent)}
+.mapcol .dot.off{fill:var(--muted); opacity:.5}
+.mapcol .lbl{fill:var(--accent-fg); font:600 9px var(--font); text-anchor:middle}
+.mapcol .me{fill:none; stroke:var(--fg); stroke-width:2}
+.mapcol .north{fill:var(--muted); font:500 8px var(--mono); text-anchor:middle}
+ol.stops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
+.stop{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; display:grid; grid-template-columns:28px minmax(0,1fr); gap:10px}
+.num{width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-family:var(--mono); font-size:13px}
+.stop.finished .num{background:var(--muted)}
+.stop .top{display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap}
+.stop .name{font-weight:600; font-size:16px}
+.leg{font-size:13px; color:var(--muted)}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+.chip{border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:6px 12px; min-height:36px; font-size:14px; display:inline-flex; gap:6px; align-items:center}
+.chip[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--fg); font-weight:600}
+.chip .tick{width:14px; display:inline-block; font-weight:700; color:var(--accent)}
+.acts{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center}
+.acts a{color:var(--accent); font-weight:600; font-size:14px; text-decoration:none; padding:6px 0}
+.acts a:hover{text-decoration:underline}
+.acts .prog{margin-left:auto; font-size:13px; color:var(--muted)}
+.empty{color:var(--muted); font-size:14px; padding:8px 0}
+.itemlist{display:flex; flex-wrap:wrap; gap:6px}
+.tag{display:inline-flex; align-items:center; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 4px 4px 10px; font-size:14px}
+.tag button{border:0; background:transparent; color:var(--muted); width:28px; height:28px; border-radius:4px; font-size:16px; line-height:1}
+.tag button:hover{color:var(--warn)}
+details summary{cursor:pointer; font-weight:600; font-size:14px}
+details[open] summary{margin-bottom:10px}
+.foot{font-size:12px; color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.chip,.btn{transition:background .12s,border-color .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Rota dos Condomínios</h1>
+  </header>
+
+  <section class="panel" aria-label="Ponto de partida">
+    <h2>De onde você sai</h2>
+    <div class="row">
+      <button class="btn" id="gps" type="button">Usar minha localização</button>
+      <label class="chk"><input type="checkbox" id="back"> Voltar ao ponto de partida</label>
+    </div>
+    <div class="row">
+      <input type="text" id="coord" inputmode="text" autocomplete="off" placeholder="Ou cole coordenadas: -26.7263, -48.6849" aria-label="Coordenadas de partida">
+      <button class="btn alt sm" id="coordGo" type="button">Usar</button>
+    </div>
+    <div class="row">
+      <select id="here" aria-label="Estou em um condomínio"></select>
+    </div>
+    <div class="status" id="status" role="status"></div>
+  </section>
+
+  <section class="summary" aria-live="polite">
+    <div><h2>Ordem de visita</h2></div>
+    <div style="text-align:right"><div class="big" id="total"></div><div class="foot" id="src"></div></div>
+  </section>
+
+  <div class="board">
+    <aside class="mapcol" id="map" aria-label="Mapa esquemático"></aside>
+    <div style="display:flex; flex-direction:column; gap:14px; min-width:0">
+      <ol class="stops" id="route"></ol>
+      <div id="doneWrap" hidden>
+        <h2 style="margin-bottom:8px">Concluídos</h2>
+        <ol class="stops" id="doneList"></ol>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <details>
+      <summary>Itens do checklist</summary>
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div class="itemlist" id="items"></div>
+        <div class="row">
+          <input type="text" id="newItem" placeholder="Novo item, ex.: Portão" aria-label="Novo item do checklist" maxlength="30">
+          <button class="btn alt sm" id="addItem" type="button">Adicionar</button>
+        </div>
+      </div>
+    </details>
+    <div class="row">
+      <button class="btn alt sm" id="reset" type="button">Zerar checklist do dia</button>
+      <span class="status" id="resetMsg"></span>
+    </div>
+  </section>
+
+  <p class="foot">As distâncias vêm do serviço de rotas OSRM (ruas e mãos de direção). Se ele não responder, o app usa linha reta. A ordem é a menor soma possível entre todos os condomínios pendentes, recalculada a cada mudança de posição.</p>
+</div>
+
+<script>
+const CONDOS=[
+  {id:"pinus",name:"Pinus II",lat:-26.726287,lon:-48.684879},
+  {id:"kuiaski",name:"Kuiaski",lat:-26.720947,lon:-48.687576},
+  {id:"tannat",name:"Tannat",lat:-26.715283,lon:-48.683491},
+  {id:"praiavermelha",name:"Praia Vermelha",lat:-26.719912,lon:-48.684107},
+  {id:"wynwood",name:"Wynwood",lat:-26.739988,lon:-48.682992},
+  {id:"borgonha",name:"Borgonha",lat:-26.736684,lon:-48.684949},
+  {id:"sibel",name:"Sibel",lat:-26.724787,lon:-48.684419},
+  {id:"aura",name:"Aura",lat:-26.735865,lon:-48.683022},
+  {id:"praiadosol",name:"Praia do Sol",lat:-26.722813,lon:-48.684829}
+];
+const KEY="rota-condominios-v1";
+const S={items:["Gás","Luzes","Água"],checks:{},done:{},back:false,manual:null,origin:null};
+try{
+  const r=JSON.parse(localStorage.getItem(KEY)||"null");
+  if(r){
+    if(Array.isArray(r.items)) S.items=r.items;
+    S.checks=r.checks||{}; S.done=r.done||{}; S.back=!!r.back; S.manual=r.manual||null;
+    if(S.manual) S.origin={lat:S.manual.lat,lon:S.manual.lon,src:"manual"};
+  }
+}catch(e){}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify({items:S.items,checks:S.checks,done:S.done,back:S.back,manual:S.manual}))}catch(e){}
+}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function hav(a,b){
+  const R=6371008,r=Math.PI/180;
+  const dLat=(b.lat-a.lat)*r,dLon=(b.lon-a.lon)*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function fmt(m){
+  if(m<1000) return Math.round(m/10)*10+" m";
+  return (m/1000).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})+" km";
+}
+
+/* Menor caminho passando por todos os pontos (programação dinâmica exata; com mais de 14 pontos usa vizinho mais próximo). */
+function solve(d0,D,back,hasOrigin){
+  const n=d0.length; if(!n) return [];
+  if(n>14){
+    const left=pts.map((_,i)=>i),out=[];
+    let cur=-1;
+    while(left.length){
+      let bi=0,bd=Infinity;
+      left.forEach((k,i)=>{const d=cur<0?d0[k]:D[cur][k]; if(d<bd){bd=d;bi=i}});
+      cur=left.splice(bi,1)[0]; out.push(cur);
+    }
+    return out;
+  }
+  const N=1<<n,INF=1e18;
+  const f=new Float64Array(N*n).fill(INF),p=new Int8Array(N*n).fill(-1);
+  for(let i=0;i<n;i++) f[(1<<i)*n+i]=d0[i];
+  for(let m=1;m<N;m++) for(let l=0;l<n;l++){
+    if(!(m&(1<<l))) continue;
+    const cur=f[m*n+l]; if(cur>=INF) continue;
+    for(let x=0;x<n;x++){
+      if(m&(1<<x)) continue;
+      const nm=m|(1<<x),v=cur+D[l][x];
+      if(v<f[nm*n+x]){f[nm*n+x]=v;p[nm*n+x]=l}
+    }
+  }
+  let bl=0,bv=Infinity;
+  for(let l=0;l<n;l++){
+    const v=f[(N-1)*n+l]+(back&&hasOrigin?d0[l]:0);
+    if(v<bv){bv=v;bl=l}
+  }
+  const seq=[]; let m=N-1,l=bl;
+  while(l>=0){seq.push(l); const pl=p[m*n+l]; m^=(1<<l); l=pl}
+  return seq.reverse();
+}
+
+/* Distâncias reais pelas ruas (OSRM). Matriz entre condomínios guardada no aparelho; a linha da origem é buscada a cada nova posição. */
+const ROAD={cc:null,o:null,oFor:null,state:"idle"};
+try{const c=JSON.parse(localStorage.getItem(KEY+"-cc")||"null"); if(c&&c.n===CONDOS.length&&c.sig===CONDOS.map(x=>x.lat+","+x.lon).join("|")) ROAD.cc=c.m}catch(e){}
+let roadSeq=0,roadTimer=0;
+function scheduleRoad(){clearTimeout(roadTimer); roadTimer=setTimeout(fetchRoad,400)}
+async function fetchRoad(){
+  const my=++roadSeq,o=S.origin?{lat:S.origin.lat,lon:S.origin.lon}:null;
+  if(ROAD.cc&&!o){ROAD.state="idle"; render(); return}
+  const coords=(o?[o]:[]).concat(CONDOS);
+  const url="https://router.project-osrm.org/table/v1/driving/"+coords.map(c=>c.lon+","+c.lat).join(";")+"?annotations=distance";
+  ROAD.state="loading"; render();
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),12000);
+    const r=await fetch(url,{signal:ctl.signal}); clearTimeout(to);
+    const j=await r.json();
+    if(my!==roadSeq) return;
+    if(j.code!=="Ok"||!j.distances) throw new Error(j.code||"erro");
+    const off=o?1:0;
+    ROAD.cc=j.distances.slice(off).map(row=>row.slice(off));
+    if(o){ROAD.o=j.distances[0].slice(1); ROAD.oFor=o}
+    try{localStorage.setItem(KEY+"-cc",JSON.stringify({n:CONDOS.length,sig:CONDOS.map(x=>x.lat+","+x.lon).join("|"),m:ROAD.cc}))}catch(e){}
+    ROAD.state="ok";
+  }catch(e){
+    if(my!==roadSeq) return;
+    ROAD.state="fail";
+  }
+  render();
+}
+
+function mapsLink(c){return "https://www.google.com/maps/dir/?api=1&destination="+c.lat+","+c.lon+"&travelmode=driving"}
+
+function mapSVG(route,origin){
+  const W=88,H=420,pad=14;
+  const all=CONDOS.map(c=>({lat:c.lat,lon:c.lon}));
+  const cLat=all.reduce((s,p)=>s+p.lat,0)/all.length,cLon=all.reduce((s,p)=>s+p.lon,0)/all.length;
+  const showOrigin=origin&&hav(origin,{lat:cLat,lon:cLon})<3500;
+  const pts=showOrigin?all.concat([origin]):all;
+  const lat0=Math.max(...pts.map(p=>p.lat)),lon0=Math.min(...pts.map(p=>p.lon));
+  const k=Math.cos(cLat*Math.PI/180);
+  const X=p=>(p.lon-lon0)*111320*k, Y=p=>(lat0-p.lat)*110574;
+  const spanX=Math.max(...pts.map(X))||1, spanY=Math.max(...pts.map(Y))||1;
+  const s=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
+  const px=p=>pad+X(p)*s, py=p=>pad+Y(p)*s;
+  let g=`<line class="grid" x1="${W/2}" y1="${H-14}" x2="${W/2}" y2="${H-4}"/><text class="north" x="${W/2}" y="10">N</text>`;
+  const line=(showOrigin?[origin]:[]).concat(route);
+  if(line.length>1) g+=`<polyline class="path" points="${line.map(p=>px(p).toFixed(1)+","+py(p).toFixed(1)).join(" ")}"/>`;
+  CONDOS.forEach(c=>{ if(S.done[c.id]) g+=`<circle class="dot off" cx="${px(c).toFixed(1)}" cy="${py(c).toFixed(1)}" r="4"/>`});
+  route.forEach((c,i)=>{
+    g+=`<circle class="dot" cx="${px(c).toFixed(1)}" cy="${py(c).toFixed(1)}" r="8"/><text class="lbl" x="${px(c).toFixed(1)}" y="${(py(c)+3).toFixed(1)}">${i+1}</text>`;
+  });
+  if(showOrigin) g+=`<circle class="me" cx="${px(origin).toFixed(1)}" cy="${py(origin).toFixed(1)}" r="6"/><circle class="me" cx="${px(origin).toFixed(1)}" cy="${py(origin).toFixed(1)}" r="1.5"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Posição relativa dos condomínios e do trajeto">${g}</svg>`;
+}
+
+function chipsHTML(c){
+  const ck=S.checks[c.id]||{};
+  return S.items.map((it,i)=>`<button type="button" class="chip" data-chk="${c.id}" data-i="${i}" aria-pressed="${!!ck[it]}"><span class="tick">${ck[it]?"✓":""}</span>${esc(it)}</button>`).join("");
+}
+function progress(c){
+  const ck=S.checks[c.id]||{};
+  return S.items.filter(it=>ck[it]).length+"/"+S.items.length;
+}
+
+function render(){
+  const pending=CONDOS.filter(c=>!S.done[c.id]);
+  const finished=CONDOS.filter(c=>S.done[c.id]);
+  const idx=pending.map(c=>CONDOS.indexOf(c));
+  const dc=(a,b)=>ROAD.cc&&ROAD.cc[a]&&ROAD.cc[a][b]!=null?ROAD.cc[a][b]:hav(CONDOS[a],CONDOS[b]);
+  const oOK=!!(S.origin&&ROAD.o&&ROAD.oFor&&ROAD.oFor.lat===S.origin.lat&&ROAD.oFor.lon===S.origin.lon);
+  const dO=a=>!S.origin?0:(oOK&&ROAD.o[a]!=null?ROAD.o[a]:hav(S.origin,CONDOS[a]));
+  const d0=idx.map(dO),D=idx.map(a=>idx.map(b=>dc(a,b)));
+  const order=solve(d0,D,S.back,!!S.origin);
+  const seq=order.map(i=>pending[i]);
+  let total=0;
+  const legs=order.map((k,i)=>{const d=i===0?d0[k]:D[order[i-1]][k]; total+=d; return d});
+  if(S.back&&S.origin&&order.length) total+=d0[order[order.length-1]];
+  const full=!!ROAD.cc&&(!S.origin||oOK);
+  $("src").textContent=ROAD.state==="loading"?"calculando ruas…":(full?"distância pelas ruas":"linha reta");
+
+  $("total").textContent=seq.length?(seq.length+(seq.length===1?" parada · ":" paradas · ")+fmt(total)):"";
+  $("route").innerHTML=seq.length?seq.map((c,i)=>{
+    const leg=i===0?(S.origin?(S.origin.src==="condo"?"ponto de partida":fmt(legs[i])+" até aqui"):"início"):"+ "+fmt(legs[i]);
+    return `<li class="stop"><div class="num">${i+1}</div><div style="min-width:0">
+      <div class="top"><span class="name">${esc(c.name)}</span><span class="leg mono">${leg}</span></div>
+      <div class="chips">${chipsHTML(c)}</div>
+      <div class="acts"><a href="${mapsLink(c)}" target="_blank" rel="noopener">Abrir no Maps</a>
+      <button type="button" class="btn alt sm" data-done="${c.id}">Concluir</button>
+      <span class="prog mono">${progress(c)}</span></div></div></li>`;
+  }).join(""):`<li class="empty">Todos os condomínios concluídos.</li>`;
+
+  $("doneWrap").hidden=!finished.length;
+  $("doneList").innerHTML=finished.map(c=>`<li class="stop finished"><div class="num">✓</div><div style="min-width:0">
+    <div class="top"><span class="name">${esc(c.name)}</span><span class="leg mono">${progress(c)}</span></div>
+    <div class="acts"><button type="button" class="btn alt sm" data-undo="${c.id}">Reabrir</button></div></div></li>`).join("");
+
+  $("map").innerHTML=mapSVG(seq,S.origin);
+  $("items").innerHTML=S.items.map((it,i)=>`<span class="tag">${esc(it)}<button type="button" data-rm="${i}" aria-label="Remover ${esc(it)}">×</button></span>`).join("")||`<span class="empty">Nenhum item.</span>`;
+  $("back").checked=S.back;
+  window.__seq=seq;
+}
+
+/* eventos */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button"); if(!t) return;
+  if(t.dataset.chk){
+    const id=t.dataset.chk,it=S.items[+t.dataset.i];
+    S.checks[id]=S.checks[id]||{}; S.checks[id][it]=!S.checks[id][it];
+    save(); render();
+  }else if(t.dataset.done){S.done[t.dataset.done]=true; save(); render()}
+  else if(t.dataset.undo){delete S.done[t.dataset.undo]; save(); render()}
+  else if(t.dataset.rm){S.items.splice(+t.dataset.rm,1); save(); render()}
+});
+$("addItem").addEventListener("click",addItem);
+$("newItem").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();addItem()}});
+function addItem(){
+  const v=$("newItem").value.trim();
+  if(!v||S.items.includes(v)) return;
+  S.items.push(v); $("newItem").value=""; save(); render();
+}
+$("back").addEventListener("change",e=>{S.back=e.target.checked; save(); render()});
+
+let resetArmed=false,resetTimer=0;
+$("reset").addEventListener("click",()=>{
+  if(!resetArmed){
+    resetArmed=true; $("reset").textContent="Toque de novo para confirmar";
+    resetTimer=setTimeout(()=>{resetArmed=false;$("reset").textContent="Zerar checklist do dia"},4000);
+    return;
+  }
+  clearTimeout(resetTimer); resetArmed=false;
+  S.checks={}; S.done={}; save(); render();
+  $("reset").textContent="Zerar checklist do dia"; $("resetMsg").textContent="Checklist zerado.";
+  setTimeout(()=>{$("resetMsg").textContent=""},3000);
+});
+
+function setStatus(msg,err){const s=$("status"); s.textContent=msg; s.className="status"+(err?" err":"")}
+
+/* origem */
+$("here").innerHTML=`<option value="">Estou em um condomínio…</option>`+CONDOS.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
+$("here").addEventListener("change",e=>{
+  const c=CONDOS.find(x=>x.id===e.target.value); if(!c) return;
+  stopWatch(); S.manual=null; S.origin={lat:c.lat,lon:c.lon,src:"condo"}; save();
+  setStatus("Partindo de "+c.name+"."); render(); scheduleRoad();
+});
+function parseCoord(txt){
+  const m=txt.replace(/,/g," ").match(/-?\d+(?:\.\d+)?/g);
+  if(!m||m.length<2) return null;
+  const lat=parseFloat(m[0]),lon=parseFloat(m[1]);
+  if(Math.abs(lat)>90||Math.abs(lon)>180) return null;
+  return {lat,lon};
+}
+function useCoord(){
+  const p=parseCoord($("coord").value);
+  if(!p){setStatus("Não entendi as coordenadas. Use o formato -26.7263, -48.6849.",true); return}
+  stopWatch(); S.manual=p; S.origin={lat:p.lat,lon:p.lon,src:"manual"}; save();
+  $("here").value=""; setStatus("Partindo das coordenadas informadas."); render(); scheduleRoad();
+}
+$("coordGo").addEventListener("click",useCoord);
+$("coord").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();useCoord()}});
+
+let watchId=null;
+function stopWatch(){
+  if(watchId!==null&&navigator.geolocation){try{navigator.geolocation.clearWatch(watchId)}catch(e){}}
+  watchId=null;
+}
+function onFix(pos){
+  const p={lat:pos.coords.latitude,lon:pos.coords.longitude,src:"gps"};
+  if(S.origin&&S.origin.src==="gps"&&hav(S.origin,p)<25) return;
+  S.origin=p; $("here").value="";
+  const hh=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  setStatus("GPS atualizado às "+hh+" · precisão de ±"+Math.round(pos.coords.accuracy)+" m");
+  render(); scheduleRoad();
+}
+function onGeoErr(err){
+  stopWatch();
+  const denied=!err||err.code===1;
+  setStatus(denied
+    ?"A localização está bloqueada neste navegador. Cole as coordenadas (no Google Maps, toque e segure no mapa e copie os números) ou escolha o condomínio onde você está."
+    :"Não consegui pegar o GPS agora. Tente de novo ou informe a partida manualmente.",true);
+}
+function startGPS(){
+  if(!navigator.geolocation){onGeoErr(null); return}
+  setStatus("Buscando sua localização…");
+  stopWatch();
+  try{
+    watchId=navigator.geolocation.watchPosition(onFix,onGeoErr,{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+  }catch(e){onGeoErr(null)}
+}
+$("gps").addEventListener("click",startGPS);
+try{
+  if(navigator.permissions&&navigator.permissions.query){
+    navigator.permissions.query({name:"geolocation"}).then(r=>{if(r.state==="granted"&&!S.manual) startGPS()}).catch(()=>{});
+  }
+}catch(e){}
+
+render(); scheduleRoad();
+</script>
