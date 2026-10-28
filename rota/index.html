@@ -58,7 +58,7 @@ label.chk{display:flex; gap:8px; align-items:center; font-size:14px}
 .mapwrap.locked .leaflet-container{touch-action:pan-y !important}
 .mapwrap.locked .leaflet-control-zoom{display:none}
 .pin span{display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); font:600 13px var(--font); border:2px solid var(--surface); box-shadow:0 1px 4px #0006}
-a.btn{display:inline-block; text-decoration:none; text-align:center}
+a.btn{display:inline-flex; align-items:center; justify-content:center; text-decoration:none; text-align:center}
 ol.stops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
 .stop{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; display:grid; grid-template-columns:28px minmax(0,1fr); gap:10px}
 .num{width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-family:var(--mono); font-size:13px}
@@ -153,7 +153,7 @@ details[open] summary{margin-bottom:10px}
     <div id="repBox" hidden style="display:flex; flex-direction:column; gap:10px">
       <img id="repImg" alt="Relatório do dia" style="width:100%; height:auto; border:1px solid var(--line); border-radius:6px; background:#fff">
       <div class="row">
-        <button class="btn sm" id="repSave" type="button">Salvar na galeria</button>
+        <a class="btn sm" id="repSave" href="#" download="ronda.png">Salvar na galeria</a>
         <button class="btn alt sm" id="repShare" type="button">Compartilhar</button>
       </div>
     </div>
@@ -512,8 +512,9 @@ try{
 }catch(e){}
 
 /* Relatório do dia: imagem PNG compacta (720 px de largura) com os prédios vistos e o que foi conferido. */
-function curDay(){return {date:S.date,items:day.items,checks:day.checks,done:day.done}}
+function curDay(){return {date:S.date,items:S.items,checks:S.checks,done:S.done}}
 function visitedCondos(day){return CONDOS.filter(c=>day.done[c.id]||day.items.some(it=>(day.checks[c.id]||{})[it]))}
+function rrect(c,x,y,w,h,r){c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
 function drawReport(day){
   const W=720,pad=16,rowH=38,headH=78,ff='Archivo, system-ui, -apple-system, "Segoe UI", sans-serif';
   const INK="#14211f",MUT="#5b6b68",ACC="#0d7a6b",LINE="#d3dbd9",WARN="#a4470a",ZEB="#f1f5f4";
@@ -553,11 +554,11 @@ function drawReport(day){
     day.items.forEach((it,k)=>{
       const ok=!!(day.checks[c.id]||{})[it],bx=itemsX+k*colW,by=cy-8;
       if(ok){
-        x.fillStyle=ACC; x.beginPath(); x.roundRect(bx,by,16,16,3); x.fill();
+        x.fillStyle=ACC; x.beginPath(); rrect(x,bx,by,16,16,3); x.fill();
         x.strokeStyle="#fff"; x.lineWidth=2.2; x.lineCap="round"; x.lineJoin="round";
         x.beginPath(); x.moveTo(bx+3.5,by+8.5); x.lineTo(bx+6.8,by+11.8); x.lineTo(bx+12.5,by+4.8); x.stroke();
       }else{
-        x.strokeStyle=done?WARN:"#9aa8a5"; x.lineWidth=2; x.beginPath(); x.roundRect(bx+1,by+1,14,14,3); x.stroke();
+        x.strokeStyle=done?WARN:"#9aa8a5"; x.lineWidth=2; x.beginPath(); rrect(x,bx+1,by+1,14,14,3); x.stroke();
       }
       x.fillStyle=ok?INK:(done?WARN:MUT); x.font=(ok?"600":"500")+" 16px "+ff; x.fillText(it,bx+23,cy+6);
     });
@@ -575,15 +576,19 @@ function drawReport(day){
 let repUrl=null,repBlob=null,repName="";
 function iosLike(){return /iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)}
 async function makeReport(day){
-  const cv=drawReport(day);
-  const blob=await new Promise(r=>cv.toBlob(r,"image/png"));
-  if(!blob){$("repMsg").textContent="Não consegui gerar a imagem.";return}
-  if(repUrl) URL.revokeObjectURL(repUrl);
-  repBlob=blob; repUrl=URL.createObjectURL(blob);
-  repName="ronda-"+day.date+".png";
-  $("repImg").src=repUrl; $("repBox").hidden=false;
-  $("repMsg").textContent=cv.width+"×"+cv.height+" px · "+Math.round(blob.size/1024)+" KB";
-  await saveReport(true);
+  try{
+    const cv=drawReport(day);
+    const blob=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error("toBlob")),"image/png"));
+    if(repUrl) URL.revokeObjectURL(repUrl);
+    repBlob=blob; repUrl=URL.createObjectURL(blob); repName="ronda-"+day.date+".png";
+    $("repImg").src=repUrl;
+    $("repSave").href=repUrl; $("repSave").setAttribute("download",repName);
+    $("repBox").hidden=false;
+    $("repMsg").textContent="Imagem pronta ("+cv.width+"×"+cv.height+" px, "+Math.round(blob.size/1024)+" KB). Toque em Salvar na galeria.";
+    $("repBox").scrollIntoView({behavior:"smooth",block:"nearest"});
+  }catch(e){
+    $("repMsg").textContent="Não consegui gerar a imagem: "+((e&&e.message)||e);
+  }
 }
 async function shareReport(){
   const file=new File([repBlob],repName,{type:"image/png"});
@@ -592,14 +597,16 @@ async function shareReport(){
   }
   return false;
 }
-async function saveReport(auto){
-  if(!repBlob) return;
-  if(iosLike()){ if(await shareReport()) return; $("repMsg").textContent="Segure a imagem abaixo e escolha Salvar na galeria."; return }
-  const a=document.createElement("a"); a.href=repUrl; a.download=repName; document.body.appendChild(a); a.click(); a.remove();
-  $("repMsg").textContent="Imagem salva em Downloads/Galeria ("+repName+"). Se não aparecer, segure a imagem abaixo e salve.";
-}
+$("repSave").addEventListener("click",async e=>{
+  if(!repBlob){e.preventDefault();return}
+  if(iosLike()){
+    e.preventDefault();
+    if(!(await shareReport())) $("repMsg").textContent="Segure a imagem abaixo e escolha Salvar na galeria.";
+    return;
+  }
+  $("repMsg").textContent="Se o download não começar, segure a imagem abaixo e escolha Salvar imagem. Dentro do WhatsApp ou Instagram, abra o link no Chrome.";
+});
 $("report").addEventListener("click",()=>{ensureToday();makeReport(curDay())});
-$("repSave").addEventListener("click",()=>saveReport(false));
 $("repShare").addEventListener("click",async()=>{if(!(await shareReport())) $("repMsg").textContent="Compartilhar não está disponível aqui. Use Salvar."});
 
 function dayStats(d){
