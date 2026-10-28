@@ -137,6 +137,16 @@ details[open] summary{margin-bottom:10px}
   </section>
 
   <section class="panel">
+    <h2>Dados do app</h2>
+    <div class="row">
+      <button class="btn alt sm" id="exp" type="button">Exportar dados</button>
+      <button class="btn alt sm" id="impBtn" type="button">Importar dados</button>
+      <input type="file" id="imp" accept="application/json,.json" hidden>
+    </div>
+    <div class="status" id="dataMsg" role="status"></div>
+  </section>
+
+  <section class="panel">
     <div class="row">
       <button class="btn" id="report" type="button">Gerar relatório do dia (imagem)</button>
     </div>
@@ -602,6 +612,60 @@ function renderHistory(){
   $("hist").innerHTML=keys.length?keys.map(k=>`<div class="row" style="justify-content:space-between; padding:8px 0; border-top:1px solid var(--line)"><div><strong>${dateLabel(k)}</strong><div class="foot">${dayStats(S.days[k])}</div></div><button type="button" class="btn alt sm" data-rep="${k}">Gerar imagem</button></div>`).join(""):'<div class="empty">Nenhum dia anterior ainda. Na virada do dia, o checklist é guardado aqui e começa um novo.</div>';
 }
 document.addEventListener("click",e=>{const b=e.target.closest("button[data-rep]"); if(b&&S.days[b.dataset.rep]) makeReport(S.days[b.dataset.rep])});
+/* Exportar e importar: um arquivo JSON com itens, hoje e histórico. */
+function setMsg(m,err){const s=$("dataMsg"); s.textContent=m; s.className="status"+(err?" err":"")}
+async function exportData(){
+  ensureToday();
+  const data={app:"rota-condominios",version:1,exportedAt:new Date().toISOString(),items:S.items,date:S.date,checks:S.checks,done:S.done,days:S.days};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const name="ronda-dados-"+todayKey()+".json";
+  const file=new File([blob],name,{type:"application/json"});
+  if(iosLike()&&navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:"Dados da ronda"}); setMsg("Dados enviados para compartilhar."); return}catch(e){if(e&&e.name==="AbortError") return}
+  }
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  setMsg("Arquivo "+name+" salvo em Downloads.");
+}
+function cleanDay(d,items){
+  if(!d||typeof d!=="object") return null;
+  const ids=new Set(CONDOS.map(c=>c.id)),checks={},done={};
+  Object.keys(d.checks||{}).forEach(id=>{ if(ids.has(id)&&d.checks[id]&&typeof d.checks[id]==="object"){checks[id]={}; Object.keys(d.checks[id]).forEach(k=>{checks[id][String(k)]=!!d.checks[id][k]})}});
+  Object.keys(d.done||{}).forEach(id=>{ if(ids.has(id)&&d.done[id]) done[id]=true});
+  return {items:(Array.isArray(d.items)?d.items:items).map(String),checks,done};
+}
+function weight(d){return Object.keys(d.done).length*10+Object.values(d.checks).reduce((n,o)=>n+Object.values(o).filter(Boolean).length,0)}
+function importData(text){
+  let j; try{j=JSON.parse(text)}catch(e){setMsg("Arquivo inválido: não é um JSON.",true);return}
+  if(!j||j.app!=="rota-condominios"){setMsg("Esse arquivo não é uma exportação deste app.",true);return}
+  const dateRe=/^\d{4}-\d{2}-\d{2}$/;
+  const baseItems=Array.isArray(j.items)&&j.items.length?j.items.map(String):S.items;
+  let added=0,updated=0;
+  Object.keys(j.days||{}).forEach(k=>{
+    if(!dateRe.test(k)) return;
+    const d=cleanDay(j.days[k],baseItems); if(!d||!weight(d)) return;
+    const cur=S.days[k];
+    if(!cur){S.days[k]=Object.assign({date:k},d); added++}
+    else if(weight(d)>weight(cur)){S.days[k]=Object.assign({date:k},d); updated++}
+  });
+  if(dateRe.test(j.date||"")&&j.date!==S.date){
+    const d=cleanDay({items:j.items,checks:j.checks,done:j.done},baseItems);
+    if(d&&weight(d)&&!S.days[j.date]){S.days[j.date]=Object.assign({date:j.date},d); added++}
+  }else if(j.date===S.date){
+    const d=cleanDay({items:j.items,checks:j.checks,done:j.done},baseItems);
+    if(d&&weight(d)>weight({checks:S.checks,done:S.done})){S.items=d.items;S.checks=d.checks;S.done=d.done;updated++}
+  }
+  save(); render(); renderHistory();
+  setMsg(added||updated?("Importado: "+added+" dia(s) novo(s), "+updated+" atualizado(s)."):"Nada novo para importar. Seus dados já estavam completos.");
+}
+$("exp").addEventListener("click",exportData);
+$("impBtn").addEventListener("click",()=>$("imp").click());
+$("imp").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+  if(f.size>5*1024*1024){setMsg("Arquivo grande demais.",true);return}
+  importData(await f.text());
+});
 function rollover(){if(ensureToday()){render();renderHistory()}}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden) rollover()});
 window.addEventListener("focus",rollover);
