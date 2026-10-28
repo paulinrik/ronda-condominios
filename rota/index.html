@@ -52,6 +52,10 @@ label.chk{display:flex; gap:8px; align-items:center; font-size:14px}
 .summary .big{font-family:var(--mono); font-size:18px; font-weight:500}
 #lmap{height:440px; border-radius:6px; border:1px solid var(--line); z-index:0; background:var(--bg)}
 .leaflet-container{font-family:var(--font)}
+.mapwrap{position:relative}
+.mapwrap .btn{position:absolute; top:10px; right:10px; z-index:1000; background:var(--surface); color:var(--fg); border:1px solid var(--line); box-shadow:0 1px 6px #0004}
+.mapwrap.locked .leaflet-container{touch-action:pan-y !important}
+.mapwrap.locked .leaflet-control-zoom{display:none}
 .pin span{display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); font:600 13px var(--font); border:2px solid var(--surface); box-shadow:0 1px 4px #0006}
 a.btn{display:inline-block; text-decoration:none; text-align:center}
 ol.stops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
@@ -108,7 +112,10 @@ details[open] summary{margin-bottom:10px}
   </section>
 
   <section class="panel" aria-label="Mapa">
-    <div id="lmap" role="region" aria-label="Mapa com a rota"></div>
+    <div class="mapwrap locked" id="mapWrap">
+      <button class="btn alt sm" id="mapLock" type="button" aria-pressed="true" hidden>Desbloquear mapa</button>
+      <div id="lmap" role="region" aria-label="Mapa com a rota"></div>
+    </div>
     <div class="row"><a class="btn alt sm" id="fullRoute" href="#" target="_blank" rel="noopener" hidden>Abrir rota completa no Google Maps</a></div>
     <div class="status" id="mapNote"></div>
   </section>
@@ -257,7 +264,18 @@ function initLeaflet(){
   LM=L.map("lmap").setView([-26.728,-48.685],14);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"}).addTo(LM);
   LG=L.layerGroup().addTo(LM);
+  $("mapLock").hidden=false;
+  setMapLock(true);
 }
+/* Mapa travado por padrão: deslizar a tela rola a página e não move o mapa. */
+function setMapLock(lock){
+  $("mapWrap").classList.toggle("locked",lock);
+  $("mapLock").textContent=lock?"Desbloquear mapa":"Travar mapa";
+  $("mapLock").setAttribute("aria-pressed",String(lock));
+  if(!LM) return;
+  ["dragging","touchZoom","scrollWheelZoom","doubleClickZoom","boxZoom","keyboard"].forEach(h=>{if(LM[h]) lock?LM[h].disable():LM[h].enable()});
+}
+$("mapLock").addEventListener("click",()=>setMapLock($("mapWrap").classList.contains("locked")?false:true));
 function fullRouteLink(seq){
   const stops=seq.map(c=>c.lat+","+c.lon),o=S.origin,back=S.back&&o;
   const dest=back?o.lat+","+o.lon:stops[stops.length-1];
