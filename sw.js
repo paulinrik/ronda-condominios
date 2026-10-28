@@ -1,4 +1,4 @@
-var CACHE_NAME = 'ronda-v1';
+var CACHE_NAME = 'ronda-v2';
 var ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function(event){
@@ -21,6 +21,9 @@ self.addEventListener('activate', function(event){
 
 self.addEventListener('fetch', function(event){
   if(event.request.method !== 'GET') return;
+  // Não intercepta serviços externos (rotas, mapas) nem o app de rota em /rota/, que busca sempre a versão atual.
+  var u = new URL(event.request.url);
+  if(u.origin !== self.location.origin || u.pathname.indexOf('/rota/') !== -1) return;
   event.respondWith(
     caches.match(event.request).then(function(cached){
       if(cached) return cached;

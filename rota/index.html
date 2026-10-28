@@ -1,7 +1,14 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Rota dos Condomínios</title>
-<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
+html{color-scheme:light}
+body{margin:0}
 /* Layout: cabeçalho com origem, depois lista de paradas com mapa esquemático fixo na lateral. */
 :root{
   --bg:#eef1f0; --surface:#ffffff; --fg:#14211f; --muted:#5b6b68; --line:#d3dbd9;
@@ -22,7 +29,7 @@
 *{box-sizing:border-box}
 body{
   background:var(--bg); color:var(--fg); font-family:var(--font); font-size:15px; line-height:1.4;
-  padding-block:16px 40px;
+  padding-top:calc(16px + env(safe-area-inset-top,0px)); padding-bottom:calc(40px + env(safe-area-inset-bottom,0px));
   padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px));
 }
 .wrap{max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
@@ -43,16 +50,10 @@ input[type=text],select{background:var(--bg); border:1px solid var(--line); bord
 label.chk{display:flex; gap:8px; align-items:center; font-size:14px}
 .summary{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap}
 .summary .big{font-family:var(--mono); font-size:18px; font-weight:500}
-.board{display:grid; grid-template-columns:88px minmax(0,1fr); gap:12px; align-items:start}
-.mapcol{position:sticky; top:calc(env(safe-area-inset-top,0px) + 8px); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:4px}
-.mapcol svg{display:block; width:100%; height:auto}
-.mapcol .grid{stroke:var(--line); stroke-width:1}
-.mapcol .path{stroke:var(--accent); stroke-width:2; fill:none; stroke-dasharray:4 3}
-.mapcol .dot{fill:var(--accent)}
-.mapcol .dot.off{fill:var(--muted); opacity:.5}
-.mapcol .lbl{fill:var(--accent-fg); font:600 9px var(--font); text-anchor:middle}
-.mapcol .me{fill:none; stroke:var(--fg); stroke-width:2}
-.mapcol .north{fill:var(--muted); font:500 8px var(--mono); text-anchor:middle}
+#lmap{height:440px; border-radius:6px; border:1px solid var(--line); z-index:0; background:var(--bg)}
+.leaflet-container{font-family:var(--font)}
+.pin span{display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); font:600 13px var(--font); border:2px solid var(--surface); box-shadow:0 1px 4px #0006}
+a.btn{display:inline-block; text-decoration:none; text-align:center}
 ol.stops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
 .stop{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; display:grid; grid-template-columns:28px minmax(0,1fr); gap:10px}
 .num{width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-family:var(--mono); font-size:13px}
@@ -78,7 +79,8 @@ details[open] summary{margin-bottom:10px}
 .foot{font-size:12px; color:var(--muted)}
 @media (prefers-reduced-motion:no-preference){.chip,.btn{transition:background .12s,border-color .12s}}
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <header>
     <h1>Rota dos Condomínios</h1>
@@ -105,8 +107,13 @@ details[open] summary{margin-bottom:10px}
     <div style="text-align:right"><div class="big" id="total"></div><div class="foot" id="src"></div></div>
   </section>
 
+  <section class="panel" aria-label="Mapa">
+    <div id="lmap" role="region" aria-label="Mapa com a rota"></div>
+    <div class="row"><a class="btn alt sm" id="fullRoute" href="#" target="_blank" rel="noopener" hidden>Abrir rota completa no Google Maps</a></div>
+    <div class="status" id="mapNote"></div>
+  </section>
+
   <div class="board">
-    <aside class="mapcol" id="map" aria-label="Mapa esquemático"></aside>
     <div style="display:flex; flex-direction:column; gap:14px; min-width:0">
       <ol class="stops" id="route"></ol>
       <div id="doneWrap" hidden>
@@ -136,6 +143,7 @@ details[open] summary{margin-bottom:10px}
   <p class="foot">As distâncias vêm do serviço de rotas OSRM (ruas e mãos de direção). Se ele não responder, o app usa linha reta. A ordem é a menor soma possível entre todos os condomínios pendentes, recalculada a cada mudança de posição.</p>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const CONDOS=[
   {id:"pinus",name:"Pinus II",lat:-26.726287,lon:-48.684879},
@@ -241,27 +249,67 @@ async function fetchRoad(){
 
 function mapsLink(c){return "https://www.google.com/maps/dir/?api=1&destination="+c.lat+","+c.lon+"&travelmode=driving"}
 
-function mapSVG(route,origin){
-  const W=88,H=420,pad=14;
-  const all=CONDOS.map(c=>({lat:c.lat,lon:c.lon}));
-  const cLat=all.reduce((s,p)=>s+p.lat,0)/all.length,cLon=all.reduce((s,p)=>s+p.lon,0)/all.length;
-  const showOrigin=origin&&hav(origin,{lat:cLat,lon:cLon})<3500;
-  const pts=showOrigin?all.concat([origin]):all;
-  const lat0=Math.max(...pts.map(p=>p.lat)),lon0=Math.min(...pts.map(p=>p.lon));
-  const k=Math.cos(cLat*Math.PI/180);
-  const X=p=>(p.lon-lon0)*111320*k, Y=p=>(lat0-p.lat)*110574;
-  const spanX=Math.max(...pts.map(X))||1, spanY=Math.max(...pts.map(Y))||1;
-  const s=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
-  const px=p=>pad+X(p)*s, py=p=>pad+Y(p)*s;
-  let g=`<line class="grid" x1="${W/2}" y1="${H-14}" x2="${W/2}" y2="${H-4}"/><text class="north" x="${W/2}" y="10">N</text>`;
-  const line=(showOrigin?[origin]:[]).concat(route);
-  if(line.length>1) g+=`<polyline class="path" points="${line.map(p=>px(p).toFixed(1)+","+py(p).toFixed(1)).join(" ")}"/>`;
-  CONDOS.forEach(c=>{ if(S.done[c.id]) g+=`<circle class="dot off" cx="${px(c).toFixed(1)}" cy="${py(c).toFixed(1)}" r="4"/>`});
-  route.forEach((c,i)=>{
-    g+=`<circle class="dot" cx="${px(c).toFixed(1)}" cy="${py(c).toFixed(1)}" r="8"/><text class="lbl" x="${px(c).toFixed(1)}" y="${(py(c)+3).toFixed(1)}">${i+1}</text>`;
-  });
-  if(showOrigin) g+=`<circle class="me" cx="${px(origin).toFixed(1)}" cy="${py(origin).toFixed(1)}" r="6"/><circle class="me" cx="${px(origin).toFixed(1)}" cy="${py(origin).toFixed(1)}" r="1.5"/>`;
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Posição relativa dos condomínios e do trajeto">${g}</svg>`;
+/* Mapa real (Leaflet + OpenStreetMap) com o trajeto pelas ruas (OSRM route). */
+let LM=null,LG=null,LLine=null,LDash=null,roadLineKey="",fitKey="",lineSeq=0,lineTimer=0;
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#0d7a6b"}
+function initLeaflet(){
+  if(typeof L==="undefined"){$("mapNote").textContent="Mapa indisponível: sem conexão com o servidor de mapas.";return}
+  LM=L.map("lmap").setView([-26.728,-48.685],14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"}).addTo(LM);
+  LG=L.layerGroup().addTo(LM);
+}
+function fullRouteLink(seq){
+  const stops=seq.map(c=>c.lat+","+c.lon),o=S.origin,back=S.back&&o;
+  const dest=back?o.lat+","+o.lon:stops[stops.length-1];
+  const wps=back?stops:stops.slice(0,-1);
+  let u="https://www.google.com/maps/dir/?api=1&destination="+dest+"&travelmode=driving";
+  if(o) u+="&origin="+o.lat+","+o.lon;
+  if(wps.length) u+="&waypoints="+wps.join("%7C");
+  return u;
+}
+function updateMap(seq){
+  const fr=$("fullRoute");
+  fr.hidden=!seq.length;
+  if(seq.length) fr.href=fullRouteLink(seq);
+  if(!LM) return;
+  LG.clearLayers(); LDash=null;
+  const acc=cssVar("--accent"),o=S.origin;
+  CONDOS.forEach(c=>{if(S.done[c.id]) L.circleMarker([c.lat,c.lon],{radius:5,color:"#888",weight:1,fillOpacity:.6}).addTo(LG).bindPopup(esc(c.name))});
+  seq.forEach((c,i)=>L.marker([c.lat,c.lon],{icon:L.divIcon({className:"pin",html:"<span>"+(i+1)+"</span>",iconSize:[28,28],iconAnchor:[14,14]})}).addTo(LG).bindPopup("<strong>"+esc(c.name)+"</strong>"));
+  if(o) L.circleMarker([o.lat,o.lon],{radius:8,color:"#fff",weight:3,fillColor:"#236bd1",fillOpacity:1}).addTo(LG).bindPopup(o.src==="gps"?"Você está aqui":"Partida");
+  const fk=o?o.src+(o.src==="gps"?"":o.lat+","+o.lon):"none";
+  if(fk!==fitKey){
+    fitKey=fk;
+    LM.fitBounds(L.latLngBounds(CONDOS.map(c=>[c.lat,c.lon]).concat(o?[[o.lat,o.lon]]:[])).pad(.1));
+  }
+  const pts=(o?[o]:[]).concat(seq);
+  const path=S.back&&o?pts.concat([pts[0]]):pts;
+  const key=path.map(p=>p.lat.toFixed(5)+","+p.lon.toFixed(5)).join(";");
+  if(path.length<2){if(LLine){LM.removeLayer(LLine);LLine=null} roadLineKey=""; $("mapNote").textContent=""; return}
+  if(key===roadLineKey) return;
+  if(LLine){LM.removeLayer(LLine);LLine=null}
+  roadLineKey="";
+  LDash=L.polyline(path.map(p=>[p.lat,p.lon]),{color:acc,weight:3,dashArray:"4 6",opacity:.7}).addTo(LG);
+  $("mapNote").textContent="Traçando trajeto pelas ruas…";
+  clearTimeout(lineTimer); lineTimer=setTimeout(()=>fetchLine(path,key,acc),600);
+}
+async function fetchLine(path,key,acc){
+  const my=++lineSeq;
+  const url="https://router.project-osrm.org/route/v1/driving/"+path.map(p=>p.lon+","+p.lat).join(";")+"?overview=full&geometries=geojson&steps=false";
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),15000);
+    const r=await fetch(url,{signal:ctl.signal}); clearTimeout(to);
+    const j=await r.json();
+    if(my!==lineSeq) return;
+    if(j.code!=="Ok"||!j.routes||!j.routes[0]) throw new Error(j.code||"erro");
+    if(LDash){LG.removeLayer(LDash);LDash=null}
+    LLine=L.geoJSON(j.routes[0].geometry,{style:{color:acc,weight:5,opacity:.85}}).addTo(LM);
+    roadLineKey=key;
+    $("mapNote").textContent="Trajeto pelas ruas: "+fmt(j.routes[0].distance)+(S.back&&S.origin?" (com volta)":"");
+  }catch(e){
+    if(my!==lineSeq) return;
+    $("mapNote").textContent="Não consegui traçar o trajeto pelas ruas agora; mostrando linha reta.";
+  }
 }
 
 function chipsHTML(c){
@@ -305,7 +353,7 @@ function render(){
     <div class="top"><span class="name">${esc(c.name)}</span><span class="leg mono">${progress(c)}</span></div>
     <div class="acts"><button type="button" class="btn alt sm" data-undo="${c.id}">Reabrir</button></div></div></li>`).join("");
 
-  $("map").innerHTML=mapSVG(seq,S.origin);
+  updateMap(seq);
   $("items").innerHTML=S.items.map((it,i)=>`<span class="tag">${esc(it)}<button type="button" data-rm="${i}" aria-label="Remover ${esc(it)}">×</button></span>`).join("")||`<span class="empty">Nenhum item.</span>`;
   $("back").checked=S.back;
   window.__seq=seq;
@@ -404,5 +452,7 @@ try{
   }
 }catch(e){}
 
-render(); scheduleRoad();
+initLeaflet(); render(); scheduleRoad();
 </script>
+</body>
+</html>
