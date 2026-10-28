@@ -9,6 +9,7 @@
 <style>
 html{color-scheme:light}
 body{margin:0}
+[hidden]{display:none!important}
 /* Layout: cabeçalho com origem, depois lista de paradas com mapa esquemático fixo na lateral. */
 :root{
   --bg:#eef1f0; --surface:#ffffff; --fg:#14211f; --muted:#5b6b68; --line:#d3dbd9;
@@ -131,6 +132,17 @@ details[open] summary{margin-bottom:10px}
   </div>
 
   <section class="panel">
+    <div class="row">
+      <button class="btn" id="report" type="button">Gerar relatório do dia (imagem)</button>
+    </div>
+    <div id="repBox" hidden style="display:flex; flex-direction:column; gap:10px">
+      <img id="repImg" alt="Relatório do dia" style="width:100%; height:auto; border:1px solid var(--line); border-radius:6px; background:#fff">
+      <div class="row">
+        <button class="btn sm" id="repSave" type="button">Salvar na galeria</button>
+        <button class="btn alt sm" id="repShare" type="button">Compartilhar</button>
+      </div>
+    </div>
+    <div class="status" id="repMsg"></div>
     <details>
       <summary>Itens do checklist</summary>
       <div style="display:flex; flex-direction:column; gap:12px">
@@ -469,6 +481,97 @@ try{
     navigator.permissions.query({name:"geolocation"}).then(r=>{if(r.state==="granted"&&!S.manual) startGPS()}).catch(()=>{});
   }
 }catch(e){}
+
+/* Relatório do dia: imagem PNG compacta (720 px de largura) com os prédios vistos e o que foi conferido. */
+function visitedCondos(){return CONDOS.filter(c=>S.done[c.id]||S.items.some(it=>(S.checks[c.id]||{})[it]))}
+function drawReport(){
+  const W=720,pad=16,rowH=38,headH=78,ff='Archivo, system-ui, -apple-system, "Segoe UI", sans-serif';
+  const INK="#14211f",MUT="#5b6b68",ACC="#0d7a6b",LINE="#d3dbd9",WARN="#a4470a",ZEB="#f1f5f4";
+  const vis=visitedCondos(),pend=CONDOS.filter(c=>!vis.includes(c));
+  const total=CONDOS.length*S.items.length;
+  let checked=0; CONDOS.forEach(c=>S.items.forEach(it=>{if((S.checks[c.id]||{})[it]) checked++}));
+  const nDone=CONDOS.filter(c=>S.done[c.id]).length;
+  const m=document.createElement("canvas").getContext("2d"); m.font="500 15px "+ff;
+  const lines=[]; let cur="Pendentes: ";
+  pend.forEach((c,i)=>{const piece=c.name+(i<pend.length-1?", ":""); if(m.measureText(cur+piece).width>W-2*pad&&cur.trim()!=="Pendentes:"){lines.push(cur.trimEnd());cur=""} cur+=piece});
+  if(pend.length) lines.push(cur.trimEnd());
+  const bodyH=Math.max(vis.length,1)*rowH;
+  const H=headH+bodyH+(pend.length?14+lines.length*21:0)+34;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const x=cv.getContext("2d");
+  x.fillStyle="#fff"; x.fillRect(0,0,W,H);
+  x.fillStyle=ACC; x.fillRect(0,0,W,6);
+  x.textBaseline="alphabetic";
+  const now=new Date(),d2=n=>String(n).padStart(2,"0");
+  x.fillStyle=INK; x.font="700 24px "+ff; x.textAlign="left"; x.fillText("Ronda dos condomínios",pad,40);
+  x.fillStyle=MUT; x.font="500 15px "+ff; x.textAlign="right";
+  x.fillText(d2(now.getDate())+"/"+d2(now.getMonth()+1)+"/"+now.getFullYear()+" · "+d2(now.getHours())+":"+d2(now.getMinutes()),W-pad,40);
+  x.textAlign="left"; x.fillStyle=INK; x.font="600 16px "+ff;
+  x.fillText(nDone+" de "+CONDOS.length+" prédios vistos · "+checked+"/"+total+" itens conferidos",pad,66);
+  x.strokeStyle=LINE; x.lineWidth=1; x.beginPath(); x.moveTo(pad,headH-4.5); x.lineTo(W-pad,headH-4.5); x.stroke();
+  const nameW=170,itemsX=pad+nameW,colW=(W-pad-itemsX)/Math.max(S.items.length,1);
+  if(!vis.length){
+    x.fillStyle=MUT; x.font="500 16px "+ff; x.fillText("Nenhum prédio visto ainda.",pad,headH+24);
+  }
+  vis.forEach((c,i)=>{
+    const y=headH+i*rowH,cy=y+rowH/2;
+    if(i%2===0){x.fillStyle=ZEB;x.fillRect(0,y,W,rowH)}
+    const done=!!S.done[c.id];
+    x.beginPath(); x.arc(pad+7,cy,6,0,Math.PI*2);
+    if(done){x.fillStyle=ACC;x.fill()} else {x.strokeStyle=WARN;x.lineWidth=2;x.stroke()}
+    x.fillStyle=INK; x.font="700 17px "+ff; x.fillText(c.name,pad+22,cy+6);
+    S.items.forEach((it,k)=>{
+      const ok=!!(S.checks[c.id]||{})[it],bx=itemsX+k*colW,by=cy-8;
+      if(ok){
+        x.fillStyle=ACC; x.beginPath(); x.roundRect(bx,by,16,16,3); x.fill();
+        x.strokeStyle="#fff"; x.lineWidth=2.2; x.lineCap="round"; x.lineJoin="round";
+        x.beginPath(); x.moveTo(bx+3.5,by+8.5); x.lineTo(bx+6.8,by+11.8); x.lineTo(bx+12.5,by+4.8); x.stroke();
+      }else{
+        x.strokeStyle=done?WARN:"#9aa8a5"; x.lineWidth=2; x.beginPath(); x.roundRect(bx+1,by+1,14,14,3); x.stroke();
+      }
+      x.fillStyle=ok?INK:(done?WARN:MUT); x.font=(ok?"600":"500")+" 16px "+ff; x.fillText(it,bx+23,cy+6);
+    });
+  });
+  let y=headH+bodyH;
+  if(pend.length){
+    y+=14; x.fillStyle=MUT; x.font="500 15px "+ff;
+    lines.forEach((l,i)=>x.fillText(l,pad,y+15+i*21));
+    y+=lines.length*21;
+  }
+  x.fillStyle=MUT; x.font="500 12px "+ff;
+  x.fillText("Círculo cheio = marcado como visto · vazio = conferência parcial · laranja = item não conferido",pad,H-12);
+  return cv;
+}
+let repUrl=null,repBlob=null,repName="";
+function iosLike(){return /iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)}
+async function makeReport(){
+  const cv=drawReport();
+  const blob=await new Promise(r=>cv.toBlob(r,"image/png"));
+  if(!blob){$("repMsg").textContent="Não consegui gerar a imagem.";return}
+  if(repUrl) URL.revokeObjectURL(repUrl);
+  repBlob=blob; repUrl=URL.createObjectURL(blob);
+  const n=new Date(),d2=v=>String(v).padStart(2,"0");
+  repName="ronda-"+n.getFullYear()+"-"+d2(n.getMonth()+1)+"-"+d2(n.getDate())+".png";
+  $("repImg").src=repUrl; $("repBox").hidden=false;
+  $("repMsg").textContent=cv.width+"×"+cv.height+" px · "+Math.round(blob.size/1024)+" KB";
+  await saveReport(true);
+}
+async function shareReport(){
+  const file=new File([repBlob],repName,{type:"image/png"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:"Ronda dos condomínios"});return true}catch(e){if(e&&e.name==="AbortError") return true}
+  }
+  return false;
+}
+async function saveReport(auto){
+  if(!repBlob) return;
+  if(iosLike()){ if(await shareReport()) return; $("repMsg").textContent="Segure a imagem abaixo e escolha Salvar na galeria."; return }
+  const a=document.createElement("a"); a.href=repUrl; a.download=repName; document.body.appendChild(a); a.click(); a.remove();
+  $("repMsg").textContent="Imagem salva em Downloads/Galeria ("+repName+"). Se não aparecer, segure a imagem abaixo e salve.";
+}
+$("report").addEventListener("click",makeReport);
+$("repSave").addEventListener("click",()=>saveReport(false));
+$("repShare").addEventListener("click",async()=>{if(!(await shareReport())) $("repMsg").textContent="Compartilhar não está disponível aqui. Use Salvar."});
 
 initLeaflet(); render(); scheduleRoad();
 </script>
